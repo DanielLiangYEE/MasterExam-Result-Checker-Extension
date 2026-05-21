@@ -3,6 +3,8 @@ import { NTU_DEPTS } from './ntu_data.js';
 import { NSYSU_DEPTS } from './nsysu_data.js';
 import { NCU_DEPTS } from './ncu_data.js';
 import { CCU_DEPTS } from './ccu_data.js';
+import { NCCU_DEPTS } from './nccu_data.js';
+
 
 export const UNIVERSITY_DATA = {
   ntu: {
@@ -11,6 +13,13 @@ export const UNIVERSITY_DATA = {
     color: '#E53935',
     url: "https://gra108.aca.ntu.edu.tw/regbchk/stu_query.asp?id=15",
     depts: NTU_DEPTS
+  },
+  nccu: {
+    name: '政治大學',
+    short: '政大',
+    color: '#F57C00',
+    url: "https://examreg.nccu.edu.tw/Home/Index4",
+    depts: NCCU_DEPTS
   },
   ncku: {
     name: '成功大學',
@@ -32,13 +41,6 @@ export const UNIVERSITY_DATA = {
     color: '#1E88E5',
     url: "https://exam2-acad.nsysu.edu.tw/stunew_query/stunew_qry_step1.asp",
     depts: NSYSU_DEPTS
-  },
-  nccu: {
-    name: '政治大學',
-    short: '政大',
-    color: '#4527A0',
-    url: "",
-    depts: []
   },
   ccu: {
     name: '中正大學',

@@ -167,7 +167,40 @@ const UNI_CONFIG = {
       run();
     }
   },
-  nccu: { url: "", func: null },
+  nccu: {
+    url: "https://examreg.nccu.edu.tw/Home/Index4",
+    multiStep: true,
+    func: (id) => {
+      const run = (retry = 0) => {
+        if (retry > 20) return;
+        const s1 = document.querySelector('#regtpe_value');
+        if (!s1) return setTimeout(() => run(retry + 1), 500);
+
+        s1.value = "115,2";
+        s1.dispatchEvent(new Event('change', { bubbles: true }));
+
+        const checkOptions = setInterval(() => {
+          const s2 = document.querySelector('#dep_num');
+          if (s2 && s2.options.length > 1) {
+            clearInterval(checkOptions);
+            s2.value = id;
+            s2.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(() => {
+              const btn = document.querySelector('#button');
+              if (btn) {
+                btn.click();
+                // 點擊後不等待非同步 AJAX 結果，直接通知背景將分頁移回主視窗，避免在背景被瀏覽器節流（throttled）
+                setTimeout(() => {
+                  chrome.runtime.sendMessage({ action: "nccu_complete" });
+                }, 100);
+              }
+            }, 400);
+          }
+        }, 500);
+      };
+      run();
+    }
+  },
   ccu: {
     url: "https://www026198.ccu.edu.tw/academic/query_reg/query_reg_1.php",
     func: (id) => {
@@ -191,7 +224,9 @@ const UNI_CONFIG = {
   }
 };
 
-chrome.runtime.onMessage.addListener((msg) => {
+const activeProcesses = new Map();
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.action === "go") {
     chrome.windows.getLastFocused({ populate: false }, (win) => {
       const cfg = UNI_CONFIG[msg.uni];
@@ -205,8 +240,32 @@ chrome.runtime.onMessage.addListener((msg) => {
       };
       startProcess(msg.id, config, win.id);
     });
+  } else if (msg.action === "nccu_complete" && sender.tab) {
+    const tabId = sender.tab.id;
+    const process = activeProcesses.get(tabId);
+    if (process) {
+      const { updateListener, targetWindowId, hiddenWindowId } = process;
+      chrome.tabs.onUpdated.removeListener(updateListener);
+      activeProcesses.delete(tabId);
+
+      chrome.tabs.move(tabId, { windowId: targetWindowId, index: -1 }, () => {
+        const winId = chrome.runtime.lastError ? null : targetWindowId;
+        const focusWin = (id) => {
+          chrome.tabs.update(tabId, { active: true });
+          chrome.windows.update(id, { focused: true });
+        };
+        if (!winId) chrome.windows.getLastFocused(w => focusWin(w.id));
+        else focusWin(winId);
+      });
+
+      chrome.runtime.sendMessage({ action: "searching_complete" });
+      setTimeout(() => {
+        chrome.windows.get(hiddenWindowId, w => !chrome.runtime.lastError && w && chrome.windows.remove(hiddenWindowId));
+      }, 1000);
+    }
   }
 });
+
 
 async function startProcess(deptId, config, targetWindowId) {
   let hiddenWindowId = null;
@@ -240,6 +299,7 @@ async function startProcess(deptId, config, targetWindowId) {
 
       if (stepCount >= maxSteps) {
         chrome.tabs.onUpdated.removeListener(updateListener);
+        activeProcesses.delete(tId);
         chrome.tabs.move(tId, { windowId: targetWindowId, index: -1 }, () => {
           const winId = chrome.runtime.lastError ? null : targetWindowId;
           const focusWin = (id) => {
@@ -259,6 +319,11 @@ async function startProcess(deptId, config, targetWindowId) {
 
     const updateListener = (tId, info) => tId === tabId && handleUpdate(tId, info.status);
     chrome.tabs.onUpdated.addListener(updateListener);
+    activeProcesses.set(tabId, {
+      updateListener,
+      targetWindowId,
+      hiddenWindowId
+    });
     chrome.tabs.get(tabId, t => t.status === 'complete' && handleUpdate(t.id, t.status));
   } catch (err) {
     console.error("[Background] startProcess Error:", err);
